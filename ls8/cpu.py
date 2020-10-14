@@ -2,6 +2,10 @@
 
 import sys
 
+if len(sys.argv) != 2:
+    print("Usage: missing command line file argument")
+    sys.exit(1)
+
 # helper function to convert binary to decimal
 def bin_to_int(num):
     return int(str(num))
@@ -22,7 +26,8 @@ class CPU:
         """Construct a new CPU."""
         self.ram = 256 * [0]
         self.reg = 8 * [0]
-        self.running = True
+        # self.reg[7] = OxF4
+        self.halted = False
         self.pc = 0
 
 
@@ -34,26 +39,31 @@ class CPU:
     def ram_write(self, address, value):
         self.ram[address] = value
     
-    def load(self):
-        """Load a program into memory."""
-
+    
+    def load(self, filename):
+        """Open a file and load a program into memory."""
         address = 0
 
-        # For now, we've just hardcoded a program:
+        try:
+            with open(filename) as f:
+                for line in f:
+                    # Split the current line on the # symbol
+                    split_line = line.split('#')
 
-        program = [
-            # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
+                    code_value = split_line[0].strip() # removes whitespace and \n character
+                    # Make sure that the value before the # symbol is not empty
+                    if code_value == '':
+                        continue
 
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+                    num = ((int(code_value, 2)))
+                    self.ram_write(address, num)
+                    # print(num)
+                    address += 1
+                    
+
+        except FileNotFoundError: 
+            print(f"{sys.argv[1]} file not found")
+            sys.exit(2)
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
@@ -82,10 +92,18 @@ class CPU:
             print(" %02X" % self.reg[i], end='')
 
         print()
+    
+    def num_operands(self, instruction):
+        """Returns the number of operands (parameters) an instruction takes"""
+        return instruction >> 6
+
+    def advance_pc(self, instruction):
+        """Returns the number of bytes (lines) to advance the pc given an instruction"""
+        return self.num_operands(instruction) + 1
 
     def run(self):
         """Run the CPU."""
-        while self.running:
+        while self.halted == False:
         # Read line by line from memory
             instruction = self.ram[self.pc]
 
@@ -98,19 +116,19 @@ class CPU:
                 integer = bin_to_int(self.ram_read(self.pc + 2))
                 # print(f"integer {integer}")
                 self.reg[reg_num] = integer
-                self.pc += 3
+                self.pc += self.advance_pc(instruction)
                 # print(self.trace())
 
             elif instruction ==  PRN:
                 # Print the number in the register
                 reg_num = bin_to_int((self.ram_read(self.pc + 1)))
                 print(self.reg[reg_num])
-                self.pc += 2
+                self.pc += self.advance_pc(instruction)
                 # print(self.trace())
 
             elif instruction == HLT:
-                running = False
-                self.pc += 1
+                halted = False
+                self.pc += self.advance_pc(instruction)
                 # print(self.trace())
             else:
                 # print(self.trace())
